@@ -108,65 +108,59 @@ namespace TBRContestCalc
         {
             var listOfContestantData = new List<ContestantData>();
 
-            try
+            //Getting Contestant data
+            using (TextFieldParser parser = new TextFieldParser(path))
             {
-                //Getting Contestant data
-                using (TextFieldParser parser = new TextFieldParser(path))
+                parser.TextFieldType = FieldType.Delimited;
+                parser.SetDelimiters(",");
+
+                // Grab all Books in order
+                if (!parser.EndOfData)
                 {
-                    parser.TextFieldType = FieldType.Delimited;
-                    parser.SetDelimiters(",");
+                    AllHeaders = parser.ReadFields().ToList();
+                    var books = AllHeaders?.Where(x => !PotentialNonBookHeaders.Contains(x)).ToList();
+                    var nonBookHeaders = AllHeaders?.Where(x => !books.Contains(x)).ToList();
+                    Books.AddRange(books);
+                    CurrentNonBookHeaders.AddRange(nonBookHeaders);
+                }
 
-                    // Grab all Books in order
-                    if (!parser.EndOfData)
+                //Get Contestant Data
+                while (!parser.EndOfData)
+                {
+                    var fields = parser.ReadFields();
+                    var successFullyParsed = int.TryParse(fields[0], out var place);
+                    if (!successFullyParsed)
                     {
-                        AllHeaders = parser.ReadFields().ToList();
-                        var books = AllHeaders?.Where(x => !PotentialNonBookHeaders.Contains(x)).ToList();
-                        var nonBookHeaders = AllHeaders?.Where(x => !books.Contains(x)).ToList();
-                        Books.AddRange(books);
-                        CurrentNonBookHeaders.AddRange(nonBookHeaders);
+                        var errorPopup = new ErrorPopup($"Expected integer. Found {fields[0]} instead");
+                        errorPopup.ShowDialog();
+                        ResetButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                        return new List<ContestantData>();
                     }
 
-                    //Get Contestant Data
-                    while (!parser.EndOfData)
+                    ContestantData contestant = new ContestantData()
                     {
-                        var fields = parser.ReadFields();
-                        var successFullyParsed = int.TryParse(fields[0], out var place);
-                        if(!successFullyParsed)
+                        Place = place,
+                        Name = fields[1],
+                        Predictions = new Dictionary<string, double>(),
+                    };
+                    for (int i = 2; i < fields.Length; i++)
+                    {
+                        if (string.IsNullOrEmpty(fields[i]))
+                            continue;
+                        foreach (var book in Books)
                         {
-                            var errorPopup = new ErrorPopup($"Expected integer. Found {fields[0]} instead");
-                            errorPopup.ShowDialog();
-                            ResetButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
-                            return new List<ContestantData>();
-                        }
-
-                        ContestantData contestant = new ContestantData()
-                        {
-                            Place = place,
-                            Name = fields[1],
-                            Predictions = new Dictionary<string, double>(),
-                        };
-                        for (int i = 2; i < fields.Length; i++)
-                        {
-                            if (string.IsNullOrEmpty(fields[i]))
-                                continue;
-                            foreach (var book in Books)
+                            var score = fields[i];
+                            if (!string.IsNullOrEmpty(score))
                             {
-                                var score = fields[i];
-                                if (!string.IsNullOrEmpty(score))
-                                {
-                                    contestant.Predictions.Add(book, double.Parse(score));
-                                }
-                                i++;
+                                contestant.Predictions.Add(book, double.Parse(score));
                             }
+                            i++;
                         }
-                        listOfContestantData.Add(contestant);
                     }
+                    listOfContestantData.Add(contestant);
                 }
             }
-            catch (Exception e)
-            {
 
-            }
             return listOfContestantData;
         }
 
