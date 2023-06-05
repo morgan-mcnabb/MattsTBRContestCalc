@@ -7,6 +7,7 @@ using System.Linq;
 using System.Printing;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls.Primitives;
 
 namespace TBRContestCalc
 {
@@ -22,7 +23,7 @@ namespace TBRContestCalc
         private List<string> CurrentNonBookHeaders { get; set; }
 
         private List<string> Books { get; set; }
-        private bool LoadedCSVData {get; set; } 
+        private bool LoadedCSVData { get; set; }
         private bool MattEnteredScores { get; set; }
         private bool Calculated { get; set; }
 
@@ -44,12 +45,12 @@ namespace TBRContestCalc
         {
             var dialog = new OpenFileDialog();
             var labelText = string.Empty;
-            if(dialog.ShowDialog() == true)
+            if (dialog.ShowDialog() == true)
             {
                 var path = dialog.FileName;
                 ContestantData = GetContestantData(path);
                 LoadedCSVData = ContestantData.Count > 0;
-                labelText = LoadedCSVData ? $"{ContestantData.Count} rows successfully loaded" : "There was a problem loading the data";
+                labelText = $"{ContestantData.Count} rows successfully loaded";
                 RowsAdded.Content = labelText;
             }
             CheckForEnabledProperties();
@@ -83,7 +84,7 @@ namespace TBRContestCalc
                                                      .ThenByDescending(b => b.PercentCorrect)
                                                      .ThenBy(c => c.AbsoluteOffAverage)
                                                      .ThenBy(d => d.OffAverage).ToList();
-            
+
             for (int i = 0; i < reOrderedContestants.Count; i++)
                 reOrderedContestants[i].Place = i + 1;
             WriteToCSV(reOrderedContestants);
@@ -107,49 +108,64 @@ namespace TBRContestCalc
         {
             var listOfContestantData = new List<ContestantData>();
 
-            //Getting Contestant data
-            using (TextFieldParser parser = new TextFieldParser(path))
+            try
             {
-                parser.TextFieldType = FieldType.Delimited;
-                parser.SetDelimiters(",");
-
-                // Grab all Books in order
-                if (!parser.EndOfData)
+                //Getting Contestant data
+                using (TextFieldParser parser = new TextFieldParser(path))
                 {
-                    AllHeaders = parser.ReadFields().ToList();
-                    var books = AllHeaders?.Where(x => !PotentialNonBookHeaders.Contains(x)).ToList();
-                    var nonBookHeaders = AllHeaders?.Where(x => !books.Contains(x)).ToList();
-                    Books.AddRange(books);
-                    CurrentNonBookHeaders.AddRange(nonBookHeaders);
-                }
+                    parser.TextFieldType = FieldType.Delimited;
+                    parser.SetDelimiters(",");
 
-                //Get Contestant Data
-                while (!parser.EndOfData)
-                {
-                    var fields = parser.ReadFields();
-
-                    ContestantData contestant = new ContestantData()
+                    // Grab all Books in order
+                    if (!parser.EndOfData)
                     {
-                        Place = int.Parse(fields[0]),
-                        Name = fields[1],
-                        Predictions = new Dictionary<string, double>(),
-                    };
-                    for (int i = 2; i < fields.Length; i++)
-                    {
-                        if (string.IsNullOrEmpty(fields[i]) )
-                            continue;
-                        foreach (var book in Books)
-                        {
-                            var score = fields[i];
-                            if (!string.IsNullOrEmpty(score))
-                            {
-                                contestant.Predictions.Add(book, double.Parse(score));
-                            }
-                            i++;
-                        }
+                        AllHeaders = parser.ReadFields().ToList();
+                        var books = AllHeaders?.Where(x => !PotentialNonBookHeaders.Contains(x)).ToList();
+                        var nonBookHeaders = AllHeaders?.Where(x => !books.Contains(x)).ToList();
+                        Books.AddRange(books);
+                        CurrentNonBookHeaders.AddRange(nonBookHeaders);
                     }
-                    listOfContestantData.Add(contestant);
+
+                    //Get Contestant Data
+                    while (!parser.EndOfData)
+                    {
+                        var fields = parser.ReadFields();
+                        var successFullyParsed = int.TryParse(fields[0], out var place);
+                        if(!successFullyParsed)
+                        {
+                            var errorPopup = new ErrorPopup($"Expected integer. Found {fields[0]} instead");
+                            errorPopup.ShowDialog();
+                            ResetButton.RaiseEvent(new RoutedEventArgs(ButtonBase.ClickEvent));
+                            return new List<ContestantData>();
+                        }
+
+                        ContestantData contestant = new ContestantData()
+                        {
+                            Place = place,
+                            Name = fields[1],
+                            Predictions = new Dictionary<string, double>(),
+                        };
+                        for (int i = 2; i < fields.Length; i++)
+                        {
+                            if (string.IsNullOrEmpty(fields[i]))
+                                continue;
+                            foreach (var book in Books)
+                            {
+                                var score = fields[i];
+                                if (!string.IsNullOrEmpty(score))
+                                {
+                                    contestant.Predictions.Add(book, double.Parse(score));
+                                }
+                                i++;
+                            }
+                        }
+                        listOfContestantData.Add(contestant);
+                    }
                 }
+            }
+            catch (Exception e)
+            {
+
             }
             return listOfContestantData;
         }
@@ -217,7 +233,7 @@ namespace TBRContestCalc
                 csvData.AppendLine(entry);
             }
 
-            var saveFileDialog = new SaveFileDialog(); 
+            var saveFileDialog = new SaveFileDialog();
             saveFileDialog.Filter = "Data Files (*.csv)|*.csv";
             saveFileDialog.DefaultExt = "csv";
             saveFileDialog.AddExtension = true;
@@ -229,7 +245,7 @@ namespace TBRContestCalc
                 File.WriteAllText(path, csvData.ToString());
                 successfullyExported = true;
             }
-           
+
             ExportStatusLabel.Content = successfullyExported ? $"Saved CSV to {path}" : $"Problem saving CSV to {path}";
             ExportStatusLabel.Visibility = Visibility.Visible;
             return true;
@@ -247,11 +263,5 @@ namespace TBRContestCalc
 
             CsvSelectorButton.IsEnabled = !LoadedCSVData;
         }
-
-        private string FormatStringDynamic(params string[] variables)
-        {
-            return string.Empty;
-        }
-
     }
 }
